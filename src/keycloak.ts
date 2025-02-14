@@ -94,6 +94,30 @@ export class KeycloakVersion {
   public static readonly V22_0_4 = KeycloakVersion.of('22.0.4');
 
   /**
+   * Keycloak version 23.0.5
+   */
+  // public static readonly V23_0_5 = KeycloakVersion.of('23.0.5');
+
+  /**
+   * Keycloak version 24.0.5
+   */
+  // public static readonly V24_0_5 = KeycloakVersion.of('24.0.5'); // / return 302, need to change healthcheck
+
+  /**
+   * Keycloak version 25.0.6
+   */
+  // public static readonly V25_0_6 = KeycloakVersion.of('25.0.6'); // / return 302, need to change healthcheck, migration of SQL fail
+
+  // Upgrade failed: https://github.com/keycloak/keycloak/issues/34899
+  // Replace '-Xms128m -Xmx162m': https://www.keycloak.org/docs/latest/upgrading/index.html#different-jvm-memory-settings-when-running-in-a-container
+  //         KC_PROXY: 'edge', & KC_BACKCHANNEL deprecated
+
+  /**
+   * Keycloak version 26.1.2
+   */
+  public static readonly V26_1_2 = KeycloakVersion.of('26.1.2');
+
+  /**
    * Custom cluster version
    * @param version custom version number
    */
@@ -792,9 +816,10 @@ export class ContainerService extends Construct {
         KC_DB_URL_PORT: '3306',
         KC_DB_USERNAME: 'admin',
         KC_HOSTNAME: props.hostname!,
-        KC_HOSTNAME_STRICT_BACKCHANNEL: 'true',
-        KC_PROXY: 'edge',
+        KC_PROXY_HEADERS: 'xforwarded',
         KC_CACHE_CONFIG_FILE: 'cache-ispn-jdbc-ping.xml',
+        KC_HEALTH_ENABLED: 'true',
+        KC_HTTP_ENABLED: 'true',
       };
       secrets = {
         KC_DB_PASSWORD: ecs.Secret.fromSecretsManager(props.database.secret, 'password'),
@@ -805,6 +830,7 @@ export class ContainerService extends Construct {
         { containerPort: containerPort }, // web port
         { containerPort: 7800 }, // jgroups-tcp
         { containerPort: 57800 }, // jgroups-tcp-fd
+        { containerPort: 9000 }, //TODO add Security group of the ALB
       ];
     }
 
@@ -855,6 +881,7 @@ export class ContainerService extends Construct {
     if (isQuarkusDistribution) {
       this.service.connections.allowFrom(this.service.connections, ec2.Port.tcp(7800), 'kc jgroups-tcp');
       this.service.connections.allowFrom(this.service.connections, ec2.Port.tcp(57800), 'kc jgroups-tcp-fd');
+      this.service.connections.allowFrom(this.service.connections, ec2.Port.tcp(9000), 'kc mgmt');
     } else {
       this.service.connections.allowFrom(this.service.connections, ec2.Port.tcp(7600), 'kc jgroups-tcp');
       this.service.connections.allowFrom(this.service.connections, ec2.Port.tcp(57600), 'kc jgroups-tcp-fd');
@@ -888,6 +915,9 @@ export class ContainerService extends Construct {
       targets: [this.service],
       healthCheck: {
         healthyThresholdCount: 3,
+        port: '8080', // 9000 don't work yet (SG?)
+        path: '/', // '/health' still don't work
+        code: 302, // 200 stil don't work
       },
       // set slow_start.duration_seconds to 60
       // see https://docs.aws.amazon.com/cli/latest/reference/elbv2/modify-target-group-attributes.html
